@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#070710">
+<title>GNSS Shield</title>
+<style>
+  :root {
+    --bg: #070710; --bg2: #0a0a1a; --bg3: #0d0d20;
+    --border: #1a1a3a; --text: #c0c0d8; --dim: #3a3a6a;
+    --green: #00ff88; --yellow: #ffdd00; --orange: #ff9900;
+    --red: #ff2200; --purple: #aa88ff; --blue: #00ccff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; overflow: hidden; }
+  #app { height: 100dvh; display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; position: relative; }
+  .scanlines { position: fixed; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,30,.06) 2px, rgba(0,0,30,.06) 4px); z-index: 100; }
+  .ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; transition: background 1s; }
+
+  /* Header */
+  #header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); background: rgba(7,7,16,.97); display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 10; flex-shrink: 0; }
+  .app-title { font-size: 15px; color: #e8e8ff; letter-spacing: 3px; font-weight: 700; }
+  .app-sub { font-size: 8px; color: var(--dim); margin-top: 2px; letter-spacing: 1px; }
+  .hbtns { display: flex; gap: 5px; }
+  .hbtn { padding: 5px 10px; border-radius: 5px; font-size: 8px; border: 1px solid var(--border); background: transparent; color: #4a4a7a; cursor: pointer; font-family: inherit; letter-spacing: .5px; transition: all .2s; }
+  .hbtn.active { border-color: rgba(0,255,136,.4); background: rgba(0,255,136,.1); color: var(--green); }
+
+  /* Scroll area */
+  #scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; position: relative; z-index: 5; }
+  #scroll::-webkit-scrollbar { width: 2px; }
+  #scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Cards */
+  .card { margin: 12px 13px 0; padding: 15px 14px; border-radius: 13px; border: 1px solid var(--border); background: var(--bg2); }
+  .card-title { font-size: 8px; color: var(--dim); letter-spacing: 2px; margin-bottom: 10px; }
+
+  /* Status card */
+  #status-card { position: relative; overflow: hidden; transition: background .8s, border-color .8s; }
+  #status-icon { font-size: 30px; line-height: 1; margin-bottom: 8px; display: block; }
+  #status-label { font-size: 13px; letter-spacing: 3px; font-weight: 700; margin-bottom: 3px; }
+  #status-source { font-size: 8px; color: var(--dim); }
+
+  /* Threat bar */
+  .threat-wrap { margin: 12px 0 10px; }
+  .threat-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .threat-label { font-size: 8px; color: var(--dim); letter-spacing: 1px; }
+  #threat-pct { font-size: 11px; font-weight: 700; }
+  .bar-bg { height: 6px; background: #1a1a3a; border-radius: 3px; overflow: hidden; }
+  #threat-bar { height: 100%; border-radius: 3px; transition: width .8s, background .5s; box-shadow: 0 0 8px currentColor; }
+
+  /* Metrics grid */
+  .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .metric { background: #07071a; border-radius: 8px; padding: 8px 7px; text-align: center; border: 1px solid var(--border); }
+  .metric-label { font-size: 7px; color: var(--dim); letter-spacing: .5px; margin-bottom: 4px; }
+  .metric-val { font-size: 14px; font-weight: 700; }
+
+  /* Detection items */
+  .det-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; margin-bottom: 6px; }
+  .det-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .det-name { font-size: 9px; flex: 1; }
+  .det-code { font-size: 7px; color: var(--dim); margin-top: 1px; }
+  .det-sev { font-size: 7px; opacity: .7; text-transform: uppercase; }
+
+  /* Layers */
+  .layer-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .layer-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; transition: all .5s; }
+  .layer-name { flex: 1; font-size: 9px; }
+  .layer-id { font-size: 7px; color: var(--dim); font-family: monospace; }
+  .layer-status { font-size: 7px; font-weight: 700; }
+
+  /* Scenarios */
+  .scn-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .scn-btn { padding: 7px 11px; border-radius: 8px; font-size: 9px; border: 1px solid var(--border); background: transparent; color: #3a3a5a; cursor: pointer; font-family: inherit; transition: all .2s; }
+  .scn-btn.active { font-weight: 700; }
+
+  /* Log */
+  .log-row { display: flex; gap: 7px; align-items: center; margin-bottom: 6px; }
+  .log-ts { font-size: 7px; color: #2a2a4a; width: 55px; flex-shrink: 0; }
+  .log-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .log-msg { font-size: 8px; flex: 1; }
+  .log-pct { font-size: 8px; opacity: .7; }
+
+  /* Fallback banner */
+  #fallback-banner { display: none; margin: 10px 13px 0; padding: 11px 14px; border-radius: 10px; background: rgba(170,136,255,.06); border: 1px solid rgba(170,136,255,.25); flex-direction: row; align-items: center; gap: 10px; }
+  #fallback-banner.show { display: flex; }
+  .fb-icon { font-size: 22px; }
+  .fb-title { font-size: 10px; color: var(--purple); font-weight: 700; }
+  .fb-sub { font-size: 8px; color: #5a5a9a; margin-top: 2px; }
+
+  /* Bottom bar */
+  #footer { padding: 10px 16px; border-top: 1px solid var(--border); background: rgba(7,7,16,.97); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; position: relative; z-index: 10; }
+  .footer-ver { font-size: 7px; color: #2a2a5a; }
+  .footer-status { display: flex; align-items: center; gap: 6px; }
+  #footer-dot { width: 6px; height: 6px; border-radius: 50%; animation: blink .8s infinite; }
+  #footer-label { font-size: 8px; letter-spacing: 1px; font-weight: 700; }
+
+  /* GPS permission screen */
+  #perm-screen { position: absolute; inset: 0; background: var(--bg); z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; }
+  .perm-icon { font-size: 56px; margin-bottom: 20px; }
+  .perm-title { font-size: 16px; color: #e8e8ff; letter-spacing: 2px; margin-bottom: 10px; }
+  .perm-desc { font-size: 10px; color: var(--dim); line-height: 1.8; margin-bottom: 24px; max-width: 280px; }
+  .perm-btn { padding: 14px 28px; border-radius: 10px; font-size: 12px; border: 1px solid rgba(0,255,136,.5); background: rgba(0,255,136,.1); color: var(--green); cursor: pointer; font-family: inherit; letter-spacing: 2px; font-weight: 700; width: 100%; max-width: 260px; }
+  .perm-sim { margin-top: 12px; padding: 10px 20px; border-radius: 8px; font-size: 10px; border: 1px solid var(--border); background: transparent; color: #4a4a7a; cursor: pointer; font-family: inherit; width: 100%; max-width: 260px; }
+
+  @keyframes blink { 0%,100%{opacity:.2} 50%{opacity:1} }
+  @keyframes pulse-ring { 0%{opacity:.6;transform:scale(1)} 100%{opacity:0;transform:scale(1.5)} }
+</style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="ambient" id="ambient"></div>
+
+<div id="app">
+
+  <!-- Permission screen -->
+  <div id="perm-screen">
+    <div class="perm-icon">📡</div>
+    <div class="perm-title">GNSS SHIELD</div>
+    <div class="perm-desc" id="perm-desc">
+      يحتاج التطبيق إذن الوصول لـ GPS لكشف التشويش ومراقبة جودة الإشارة في الوقت الحقيقي
+    </div>
+    <button class="perm-btn" onclick="requestGPS()">⚡ تشغيل GPS الحقيقي</button>
+    <button class="perm-sim" onclick="startSim()">محاكاة بدون GPS</button>
+  </div>
+
+  <!-- Main app (hidden until started) -->
+  <div id="main-app" style="display:none; flex-direction:column; height:100%;">
+
+    <!-- Header -->
+    <div id="header">
+      <div>
+        <div class="app-title">GNSS SHIELD</div>
+        <div class="app-sub" id="mode-sub">SDK v1.0 · حماية ملاحة متقدمة</div>
+      </div>
+      <div class="hbtns">
+        <button class="hbtn" onclick="toggleLang()" id="lang-btn">EN</button>
+        <button class="hbtn" id="mode-btn" onclick="toggleMode()">⚡ محاكاة</button>
+      </div>
+    </div>
+
+    <!-- Scroll content -->
+    <div id="scroll">
+
+      <!-- Status card -->
+      <div class="card" id="status-card">
+        <span id="status-icon">◌</span>
+        <div id="status-label">تهيئة النظام</div>
+        <div id="status-source" class="app-sub">المصدر: GPS</div>
+
+        <div class="threat-wrap">
+          <div class="threat-header">
+            <span class="threat-label" id="threat-lbl">مستوى التهديد</span>
+            <span id="threat-pct" style="color:var(--green)">0%</span>
+          </div>
+          <div class="bar-bg"><div id="threat-bar" style="width:0%;background:var(--green);color:var(--green)"></div></div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label" id="lbl-acc">الدقة</div>
+            <div class="metric-val" id="val-acc" style="color:var(--green)">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">NIC Score</div>
+            <div class="metric-val" id="val-nic" style="color:var(--green)">—</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label" id="lbl-src">المصادر</div>
+            <div class="metric-val" id="val-src" style="color:var(--green); font-size:10px">GPS+</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fallback banner -->
+      <div id="fallback-banner">
+        <div class="fb-icon">↺</div>
+        <div>
+          <div class="fb-title" id="fb-title">وضع الملاحة الاحتياطي</div>
+          <div class="fb-sub" id="fb-sub">يعمل الآن على: شبكات WiFi + Cell Tower</div>
+        </div>
+      </div>
+
+      <!-- Detections -->
+      <div class="card" id="det-card" style="display:none">
+        <div class="card-title" id="det-title">⚠ تهديدات مكشوفة</div>
+        <div id="det-list"></div>
+      </div>
+
+      <!-- Layers -->
+      <div class="card">
+        <div class="card-title" id="lyr-title">طبقات الحماية</div>
+        <div id="layers-list"></div>
+      </div>
+
+      <!-- Scenario simulator -->
+      <div class="card" id="sim-card">
+        <div class="card-title" id="sim-title">محاكاة الهجمات — اختبر الـ SDK</div>
+        <div class="scn-grid" id="scn-grid"></div>
+      </div>
+
+      <!-- Event log -->
+      <div class="card" id="log-card" style="display:none">
+        <div class="card-title" id="log-title">سجل الأحداث</div>
+        <div id="log-list"></div>
+      </div>
+
+      <div style="height:16px"></div>
+    </div>
+
+    <!-- Footer -->
+    <div id="footer">
+      <div class="footer-ver">GNSS SHIELD SDK v1.0</div>
+      <div class="footer-status">
+        <div id="footer-dot" style="background:var(--green)"></div>
+        <div id="footer-label" style="color:var(--green)">NOMINAL</div>
+      </div>
+    </div>
+
+  </div><!-- /main-app -->
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+let isAr = true;
+let useReal = false;
+let currentScenario = 'nominal';
+let watchId = null;
+let simTimer = null;
+let simTick = 0;
+let scenarioTick = 0;
+let history = [];
+let baseline = null;
+let lastGoodPos = null;
+let eventLog = [];
+
+const T = {
+  ar: {
+    init:'تهيئة النظام', nominal:'نظام سليم', caution:'تحذير مبكر',
+    warning:'تحذير تشويش', attack:'هجوم مكشوف', fallback:'وضع احتياطي', error:'خطأ',
+    threatLvl:'مستوى التهديد', accuracy:'الدقة', sources:'المصادر',
+    layers:'طبقات الحماية', detections:'⚠ تهديدات مكشوفة',
+    simTitle:'محاكاة الهجمات — اختبر الـ SDK',
+    log:'سجل الأحداث', fallbackTitle:'وضع الملاحة الاحتياطي',
+    fallbackSub:'يعمل الآن على: شبكات WiFi + Cell Tower',
+    on:'نشط', off:'معطل', backup:'احتياطي',
+    scn:{ nominal:'طبيعي', jamming:'تشويش', spoofing:'انتحال', fallback:'احتياطي', recovery:'استرداد' },
+    source:'GPS+', modeReal:'📡 GPS حقيقي', modeSim:'⚡ محاكاة',
+    det:{ ACCURACY_SPIKE:'ارتفاع مفاجئ في الخطأ', POSITION_JUMP:'قفزة موقع مستحيلة', ACCURACY_OSCILLATION:'تذبذب إشارة مشبوه', WEAK_SIGNAL:'إشارة ضعيفة', GPS_SIGNAL_LOST:'فقدان إشارة GPS', POSITION_STALE:'موقع متأخر', RECOVERY_MODE:'جاري الاسترداد' },
+    layers:[ ['GPS_FUSION','دمج متعدد المصادر'], ['DETECTION','كشف التشويش'], ['NIC_MONITOR','مراقبة NIC'], ['FALLBACK_NET','شبكة احتياطية WiFi'], ['IMU_DR','تتبع القصور الذاتي'], ['OSNMA_READY','Galileo OSNMA'] ],
+    permDesc: 'يحتاج التطبيق إذن الوصول لـ GPS لكشف التشويش ومراقبة جودة الإشارة في الوقت الحقيقي',
+  },
+  en: {
+    init:'INITIALIZING', nominal:'NOMINAL', caution:'CAUTION',
+    warning:'WARNING', attack:'ATTACK DETECTED', fallback:'FALLBACK MODE', error:'ERROR',
+    threatLvl:'THREAT LEVEL', accuracy:'ACCURACY', sources:'SOURCES',
+    layers:'PROTECTION LAYERS', detections:'⚠ DETECTED THREATS',
+    simTitle:'ATTACK SIMULATOR — Test SDK',
+    log:'EVENT LOG', fallbackTitle:'FALLBACK NAVIGATION ACTIVE',
+    fallbackSub:'Now using: WiFi positioning + Cell towers',
+    on:'ON', off:'OFF', backup:'BACKUP',
+    scn:{ nominal:'Normal', jamming:'Jamming', spoofing:'Spoofing', fallback:'Fallback', recovery:'Recovery' },
+    source:'GPS+', modeReal:'📡 LIVE GPS', modeSim:'⚡ SIMULATE',
+    det:{ ACCURACY_SPIKE:'Accuracy spike detected', POSITION_JUMP:'Impossible position jump', ACCURACY_OSCILLATION:'Signal oscillation', WEAK_SIGNAL:'Weak GPS signal', GPS_SIGNAL_LOST:'GPS signal lost', POSITION_STALE:'Position data stale', RECOVERY_MODE:'Recovering signal' },
+    layers:[ ['GPS_FUSION','Multi-Source Fusion'], ['DETECTION','Jamming Detection'], ['NIC_MONITOR','NIC Monitoring'], ['FALLBACK_NET','WiFi/Cell Fallback'], ['IMU_DR','IMU Dead Reckoning'], ['OSNMA_READY','Galileo OSNMA'] ],
+    permDesc: 'GNSS Shield needs GPS access to detect jamming and monitor signal quality in real time.',
+  }
+};
+
+const STATUS_CFG = {
+  INITIALIZING: { color:'#6666ff', icon:'◌' },
+  NOMINAL:      { color:'#00ff88', icon:'●' },
+  CAUTION:      { color:'#ffdd00', icon:'◉' },
+  WARNING:      { color:'#ff9900', icon:'⚠' },
+  ATTACK:       { color:'#ff2200', icon:'☠' },
+  FALLBACK:     { color:'#aa88ff', icon:'↺' },
+  ERROR:        { color:'#ff4444', icon:'✕' },
+};
+
+const SCENARIOS = ['nominal','jamming','spoofing','fallback','recovery'];
+const SCN_COLORS = { nominal:'#00ff88', jamming:'#ff9900', spoofing:'#ff2200', fallback:'#aa88ff', recovery:'#00ccff' };
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+function t(key) { return (isAr ? T.ar : T.en)[key] || key; }
+
+function toggleLang() {
+  isAr = !isAr;
+  document.documentElement.lang = isAr ? 'ar' : 'en';
+  document.documentElement.dir = isAr ? 'rtl' : 'ltr';
+  document.getElementById('lang-btn').textContent = isAr ? 'EN' : 'عربي';
+  document.getElementById('perm-desc').textContent = (isAr ? T.ar : T.en).permDesc;
+  refreshLabels();
+}
+
+function refreshLabels() {
+  const tx = isAr ? T.ar : T.en;
+  document.getElementById('threat-lbl').textContent = tx.threatLvl;
+  document.getElementById('lbl-acc').textContent = tx.accuracy;
+  document.getElementById('lbl-src').textContent = tx.sources;
+  document.getElementById('lyr-title').textContent = tx.layers;
+  document.getElementById('det-title').textContent = tx.detections;
+  document.getElementById('sim-title').textContent = tx.simTitle;
+  document.getElementById('log-title').textContent = tx.log;
+  document.getElementById('fb-title').textContent = tx.fallbackTitle;
+  document.getElementById('fb-sub').textContent = tx.fallbackSub;
+  document.getElementById('mode-btn').textContent = useReal ? tx.modeReal : tx.modeSim;
+  buildScenarios();
+  buildLayers(lastState);
+}
+
+function toggleMode() {
+  if (useReal) { stopAll(); useReal = false; startSim(); }
+  else { stopAll(); requestGPS(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// GPS
+// ═══════════════════════════════════════════════════════════
+function requestGPS() {
+  if (!navigator.geolocation) { startSim(); return; }
+  navigator.geolocation.getCurrentPosition(
+    () => { useReal = true; showMain(); startReal(); },
+    () => { startSim(); },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+
+function startReal() {
+  useReal = true;
+  document.getElementById('mode-btn').textContent = (isAr?T.ar:T.en).modeReal;
+  document.getElementById('mode-btn').classList.add('active');
+  document.getElementById('sim-card').style.display = 'none';
+  watchId = navigator.geolocation.watchPosition(onGPSPos, onGPSErr, { enableHighAccuracy:true, timeout:10000, maximumAge:2000 });
+}
+
+function onGPSPos(pos) {
+  const { latitude:lat, longitude:lon, accuracy } = pos.coords;
+  const now = Date.now();
+  history.push({ lat, lon, accuracy, ts:now });
+  if (history.length > 30) history.shift();
+  if (!baseline && history.length >= 3) {
+    baseline = { accuracy: history.reduce((s,h)=>s+h.accuracy,0)/history.length, lat, lon };
+  }
+
+  const dets = [];
+  let threat = 0;
+
+  if (baseline && accuracy > baseline.accuracy * 5) { dets.push('ACCURACY_SPIKE'); threat += 0.35; }
+  if (history.length >= 2) {
+    const prev = history[history.length-2];
+    const dt = (now - prev.ts)/1000;
+    const dist = haversine(prev.lat, prev.lon, lat, lon);
+    if (dist/dt > 300 && dt > 0.5) { dets.push('POSITION_JUMP'); threat += 0.45; }
+  }
+  if (accuracy > 200) { dets.push('WEAK_SIGNAL'); threat += 0.20; }
+
+  threat = Math.min(1, threat);
+  const nic = estimateNIC(accuracy, dets);
+  let status = threat > 0.7 ? 'ATTACK' : threat > 0.35 ? 'WARNING' : dets.length ? 'CAUTION' : 'NOMINAL';
+  if (status !== 'ATTACK') lastGoodPos = { lat, lon, accuracy };
+
+  updateUI({ status, threatLevel:threat, accuracy:Math.round(accuracy), nicScore:nic, detections:dets, source:'GPS_FUSED', fallbackActive:false });
+}
+
+function onGPSErr() {
+  updateUI({ status:'FALLBACK', threatLevel:.6, accuracy:null, nicScore:3, detections:['GPS_SIGNAL_LOST'], source:'CELL_WIFI', fallbackActive:true });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIMULATOR
+// ═══════════════════════════════════════════════════════════
+function startSim() {
+  useReal = false;
+  showMain();
+  document.getElementById('mode-btn').textContent = (isAr?T.ar:T.en).modeSim;
+  document.getElementById('sim-card').style.display = 'block';
+  buildScenarios();
+  simTick = 0; scenarioTick = 0;
+  simTimer = setInterval(runSim, 1500);
+}
+
+function runSim() {
+  simTick++; scenarioTick++;
+  const scn = currentScenario;
+  let s;
+
+  if (scn === 'nominal') {
+    s = { status:'NOMINAL', threatLevel:.05+Math.random()*.08, accuracy:4+Math.random()*3, source:'GPS_FUSED', detections:[], nicScore:9+(Math.random()>.5?1:0), fallbackActive:false };
+  } else if (scn === 'jamming') {
+    s = { status:scenarioTick<3?'WARNING':'ATTACK', threatLevel:Math.min(.95,.4+scenarioTick*.1), accuracy:50+scenarioTick*80+Math.random()*50, source:'DEGRADED', detections:['ACCURACY_SPIKE','WEAK_SIGNAL'], nicScore:Math.max(1,8-scenarioTick), fallbackActive:false };
+  } else if (scn === 'spoofing') {
+    s = { status:scenarioTick<2?'CAUTION':'ATTACK', threatLevel:Math.min(.92,.3+scenarioTick*.15), accuracy:3+Math.random()*2, source:'GPS_FUSED', detections:scenarioTick>2?['POSITION_JUMP','ACCURACY_OSCILLATION']:['ACCURACY_OSCILLATION'], nicScore:Math.max(1,9-scenarioTick*2), fallbackActive:false };
+  } else if (scn === 'fallback') {
+    s = { status:'FALLBACK', threatLevel:.6, accuracy:150+Math.random()*100, source:'CELL_WIFI', detections:['GPS_SIGNAL_LOST'], nicScore:3, fallbackActive:true };
+  } else {
+    s = { status:scenarioTick>4?'NOMINAL':'WARNING', threatLevel:Math.max(.05,.7-scenarioTick*.15), accuracy:Math.max(5,200-scenarioTick*35), source:scenarioTick>4?'GPS_FUSED':'IMU_DEAD_RECKONING', detections:scenarioTick>4?[]:['RECOVERY_MODE'], nicScore:Math.min(9,2+scenarioTick*2), fallbackActive:false };
+  }
+  updateUI(s);
+}
+
+function setScenario(s) {
+  currentScenario = s; scenarioTick = 0;
+  document.querySelectorAll('.scn-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.scn === s);
+    b.style.borderColor = b.dataset.scn === s ? SCN_COLORS[s]+'80' : 'var(--border)';
+    b.style.background = b.dataset.scn === s ? SCN_COLORS[s]+'18' : 'transparent';
+    b.style.color = b.dataset.scn === s ? SCN_COLORS[s] : '#3a3a5a';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// UI UPDATE
+// ═══════════════════════════════════════════════════════════
+let lastState = null;
+
+function updateUI(state) {
+  lastState = state;
+  const cfg = STATUS_CFG[state.status] || STATUS_CFG.NOMINAL;
+  const pct = Math.round((state.threatLevel||0)*100);
+  const tx = isAr ? T.ar : T.en;
+  const statusLbl = tx[state.status.toLowerCase()] || state.status;
+
+  // Ambient glow
+  document.getElementById('ambient').style.background = `radial-gradient(ellipse 60% 40% at 50% 20%, ${cfg.color}08 0%, transparent 70%)`;
+
+  // Status card
+  const card = document.getElementById('status-card');
+  card.style.background = cfg.color+'12';
+  card.style.borderColor = cfg.color+'40';
+
+  document.getElementById('status-icon').textContent = cfg.icon;
+  document.getElementById('status-icon').style.color = cfg.color;
+  document.getElementById('status-icon').style.animation = state.status==='ATTACK'?'blink .6s infinite':'none';
+  document.getElementById('status-label').textContent = statusLbl;
+  document.getElementById('status-label').style.color = cfg.color;
+  document.getElementById('status-source').textContent = (isAr?'المصدر:':'SOURCE:') + ' ' + state.source;
+
+  // Threat bar
+  document.getElementById('threat-pct').textContent = pct+'%';
+  document.getElementById('threat-pct').style.color = cfg.color;
+  document.getElementById('threat-bar').style.width = pct+'%';
+  document.getElementById('threat-bar').style.background = cfg.color;
+  document.getElementById('threat-bar').style.color = cfg.color;
+
+  // Metrics
+  const accColor = !state.accuracy ? '#6a6a9a' : state.accuracy<10?'#00ff88':state.accuracy<50?'#ffdd00':'#ff9900';
+  document.getElementById('val-acc').textContent = state.accuracy ? state.accuracy+'m' : '—';
+  document.getElementById('val-acc').style.color = accColor;
+
+  const nicColor = !state.nicScore ? '#6a6a9a' : state.nicScore>=8?'#00ff88':state.nicScore>=6?'#ffdd00':state.nicScore>=4?'#ff9900':'#ff2200';
+  document.getElementById('val-nic').textContent = state.nicScore ?? '—';
+  document.getElementById('val-nic').style.color = nicColor;
+
+  const srcColor = state.fallbackActive ? '#aa88ff' : '#00ff88';
+  document.getElementById('val-src').textContent = state.fallbackActive ? (isAr?'احتياطي':'BACKUP') : 'GPS+';
+  document.getElementById('val-src').style.color = srcColor;
+
+  // Fallback banner
+  document.getElementById('fallback-banner').classList.toggle('show', !!state.fallbackActive);
+
+  // Detections
+  const dets = state.detections || [];
+  const detCard = document.getElementById('det-card');
+  if (dets.length > 0) {
+    detCard.style.display = 'block';
+    const sevColor = s => s==='critical'?'#ff2200':s==='high'?'#ff7700':s==='medium'?'#ffdd00':'#88aaff';
+    const sevMap = { POSITION_JUMP:'critical', ACCURACY_SPIKE:'high', GPS_SIGNAL_LOST:'high', ACCURACY_OSCILLATION:'medium', WEAK_SIGNAL:'medium', POSITION_STALE:'medium', RECOVERY_MODE:'low' };
+    document.getElementById('det-list').innerHTML = dets.map(d => {
+      const lbl = (isAr?T.ar:T.en).det[d] || d;
+      const sev = sevMap[d] || 'medium';
+      const c = sevColor(sev);
+      return `<div class="det-item" style="background:${c}0d;border:1px solid ${c}22">
+        <div class="det-dot" style="background:${c};box-shadow:0 0 5px ${c}"></div>
+        <div><div class="det-name" style="color:${c}">${lbl}</div><div class="det-code">${d}</div></div>
+        <div class="det-sev" style="color:${c}">${sev}</div>
+      </div>`;
+    }).join('');
+  } else { detCard.style.display = 'none'; }
+
+  // Layers
+  buildLayers(state);
+
+  // Footer
+  document.getElementById('footer-dot').style.background = cfg.color;
+  document.getElementById('footer-dot').style.boxShadow = `0 0 5px ${cfg.color}`;
+  document.getElementById('footer-label').textContent = statusLbl;
+  document.getElementById('footer-label').style.color = cfg.color;
+
+  // Log
+  if (state.status !== 'NOMINAL' && state.status !== 'INITIALIZING') {
+    eventLog.unshift({ ts: new Date().toLocaleTimeString(), status: state.status, msg: dets[0]||state.status, threat: pct, color: cfg.color });
+    if (eventLog.length > 8) eventLog.pop();
+    const logCard = document.getElementById('log-card');
+    logCard.style.display = 'block';
+    document.getElementById('log-list').innerHTML = eventLog.map((e,i) =>
+      `<div class="log-row" style="opacity:${1-i*.1}">
+        <div class="log-ts">${e.ts}</div>
+        <div class="log-dot" style="background:${e.color}"></div>
+        <div class="log-msg" style="color:${e.color}">${(isAr?T.ar:T.en).det[e.msg]||e.msg}</div>
+        <div class="log-pct" style="color:${e.color}">${e.threat}%</div>
+      </div>`
+    ).join('');
+  }
+}
+
+function buildLayers(state) {
+  const tx = isAr ? T.ar : T.en;
+  const layers = tx.layers;
+  const active = [
+    state && (state.source?.includes('FUSED')||state.status==='NOMINAL'),
+    state && state.status !== 'INITIALIZING',
+    state && state.nicScore !== null,
+    true, true, false
+  ];
+  const colors = ['#00ff88','#00ccff','#ffdd00','#aa88ff','#ff9900','#6666ff'];
+  document.getElementById('layers-list').innerHTML = layers.map(([id,name],i) => {
+    const on = active[i];
+    const c = colors[i];
+    return `<div class="layer-row">
+      <div class="layer-dot" style="background:${on?c:'#2a2a4a'};${on?`box-shadow:0 0 6px ${c}`:''}"></div>
+      <div class="layer-name" style="color:${on?c+'cc':'#3a3a5a'}">${name}</div>
+      <div class="layer-id">${id}</div>
+      <div class="layer-status" style="color:${on?'#00ff8888':'#ff444466'}">${on?tx.on:tx.off}</div>
+    </div>`;
+  }).join('');
+}
+
+function buildScenarios() {
+  const tx = isAr ? T.ar : T.en;
+  document.getElementById('scn-grid').innerHTML = SCENARIOS.map(s => {
+    const c = SCN_COLORS[s];
+    const active = s === currentScenario;
+    return `<button class="scn-btn${active?' active':''}" data-scn="${s}" onclick="setScenario('${s}')"
+      style="border-color:${active?c+'80':'var(--border)'};background:${active?c+'18':'transparent'};color:${active?c:'#3a3a5a'}">
+      ${tx.scn[s]}
+    </button>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function haversine(lat1,lon1,lat2,lon2) {
+  const R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function estimateNIC(acc, dets) {
+  if (dets.includes('POSITION_JUMP')) return 1;
+  if (dets.includes('ACCURACY_SPIKE')) return 3;
+  if (acc<5) return 11; if (acc<10) return 9; if (acc<30) return 8;
+  if (acc<100) return 6; if (acc<500) return 4; return 2;
+}
+function stopAll() {
+  if (watchId) { navigator.geolocation.clearWatch(watchId); watchId=null; }
+  if (simTimer) { clearInterval(simTimer); simTimer=null; }
+}
+function showMain() {
+  document.getElementById('perm-screen').style.display = 'none';
+  const m = document.getElementById('main-app');
+  m.style.display = 'flex';
+  buildLayers(null);
+  buildScenarios();
+  updateUI({ status:'INITIALIZING', threatLevel:0, detections:[], nicScore:null, accuracy:null, source:'GPS', fallbackActive:false });
+}
+
+// Init with nominal state after short delay
+setTimeout(() => {
+  if (document.getElementById('perm-screen').style.display !== 'none') {
+    // Still on perm screen — that's fine
+  }
+}, 500);
+</script>
+</body>
+</html>
